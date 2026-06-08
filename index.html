@@ -11,20 +11,13 @@
 <meta name="apple-mobile-web-app-title" content="Watch" />
 <meta name="theme-color" content="#0b0b0f" />
 <meta name="mobile-web-app-capable" content="yes" />
-<!-- Simple inline app icon (red play button) -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%230b0b0f'/%3E%3Ccircle cx='90' cy='90' r='52' fill='%23ff2d55'/%3E%3Cpath d='M78 68l34 22-34 22z' fill='white'/%3E%3C/svg%3E" />
 
 <style>
   :root {
-    --bg: #0b0b0f;
-    --panel: #16161d;
-    --panel-2: #1f1f29;
-    --text: #f2f2f5;
-    --muted: #9a9aa8;
-    --accent: #ff2d55;
-    --accent-2: #2d7dff;
-    --ok: #34c759;
-    --radius: 16px;
+    --bg: #0b0b0f; --panel: #16161d; --panel-2: #1f1f29;
+    --text: #f2f2f5; --muted: #9a9aa8; --accent: #ff2d55; --accent-2: #2d7dff;
+    --ok: #34c759; --radius: 16px;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
@@ -32,30 +25,20 @@
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
     overscroll-behavior-y: none;
   }
-  body {
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-    min-height: 100vh;
-  }
-  header {
-    display: flex; align-items: center; gap: 10px;
-    padding: 14px 16px 10px;
-  }
-  header .logo {
-    width: 30px; height: 30px; border-radius: 8px; background: var(--accent);
-    display: grid; place-items: center; flex: none;
-  }
+  body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); min-height: 100vh; }
+  header { display: flex; align-items: center; gap: 10px; padding: 14px 16px 10px; }
+  header .logo { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); display: grid; place-items: center; flex: none; }
   header .logo svg { width: 16px; height: 16px; }
   header h1 { font-size: 20px; margin: 0; font-weight: 700; letter-spacing: -0.02em; }
   header .sub { color: var(--muted); font-size: 12px; margin-top: 1px; }
+  header .gear { margin-left: auto; background: var(--panel); border: 1px solid #2a2a36; color: var(--muted);
+    width: 38px; height: 38px; border-radius: 10px; font-size: 18px; flex: none; }
+  header .gear:active { color: var(--text); }
 
-  .add-bar {
-    display: flex; gap: 8px; padding: 4px 16px 14px;
-  }
+  .add-bar { display: flex; gap: 8px; padding: 4px 16px 6px; }
   .add-bar input {
     flex: 1; min-width: 0; background: var(--panel); border: 1px solid #2a2a36;
-    color: var(--text); border-radius: 12px; padding: 13px 14px; font-size: 16px;
-    outline: none;
+    color: var(--text); border-radius: 12px; padding: 13px 14px; font-size: 16px; outline: none;
   }
   .add-bar input::placeholder { color: #6c6c7a; }
   .add-bar button {
@@ -63,113 +46,101 @@
     border-radius: 12px; padding: 0 18px; font-size: 16px; font-weight: 600;
   }
   .add-bar button:active { opacity: .7; }
+  .hint { padding: 0 18px 8px; color: #6c6c7a; font-size: 11.5px; }
 
   main { padding: 0 16px 40px; }
-
   .section-label {
+    display: flex; align-items: center; gap: 8px;
     font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
     color: var(--muted); margin: 8px 2px 10px; font-weight: 600;
   }
+  .section-label .clear { margin-left: auto; text-transform: none; letter-spacing: 0;
+    color: var(--accent-2); background: none; border: none; font-size: 13px; font-weight: 600; }
 
   ul.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
   li.card {
     background: var(--panel); border: 1px solid #23232e; border-radius: var(--radius);
-    overflow: hidden; display: flex; gap: 12px; padding: 10px;
-  }
-  li.card .thumb {
-    width: 116px; height: 66px; border-radius: 10px; flex: none; object-fit: cover;
-    background: #000; position: relative;
+    overflow: hidden; display: flex; gap: 12px; padding: 10px; align-items: stretch;
   }
   .thumb-wrap { position: relative; flex: none; }
-  .thumb-wrap .pct {
-    position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0,0,0,.4);
-    border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; overflow: hidden;
-  }
+  li.card .thumb { width: 116px; height: 66px; border-radius: 10px; flex: none; object-fit: cover; background: #000; display: block; }
+  .thumb-wrap .pct { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0,0,0,.4);
+    border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; overflow: hidden; }
   .thumb-wrap .pct > span { display: block; height: 100%; background: var(--accent); }
-  .thumb-wrap .badge {
-    position: absolute; right: 4px; bottom: 8px; background: rgba(0,0,0,.78);
-    color: #fff; font-size: 11px; padding: 1px 5px; border-radius: 5px; font-variant-numeric: tabular-nums;
-  }
-  .card .meta { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; }
-  .card .title {
-    font-size: 14px; line-height: 1.3; font-weight: 600;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-  }
-  .card .row2 { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .thumb-wrap .badge { position: absolute; right: 4px; bottom: 8px; background: rgba(0,0,0,.78);
+    color: #fff; font-size: 11px; padding: 1px 5px; border-radius: 5px; font-variant-numeric: tabular-nums; }
+  .card .meta { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+  .card .title { font-size: 14px; line-height: 1.3; font-weight: 600;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .card .row2 { display: flex; align-items: center; gap: 8px; }
   .card .status { font-size: 12px; color: var(--muted); flex: 1; }
   .card .status.done { color: var(--ok); }
-  .card .del {
-    background: transparent; border: none; color: #6c6c7a; font-size: 18px; padding: 4px 6px;
-  }
+  .card .channel { font-size: 12px; color: var(--muted); }
+  .card .del { background: transparent; border: none; color: #6c6c7a; font-size: 18px; padding: 4px 6px; align-self: center; }
   .card .del:active { color: var(--accent); }
+  .card .addbtn { align-self: center; flex: none; background: var(--panel-2); border: 1px solid #2f2f3c;
+    color: var(--text); border-radius: 10px; padding: 8px 12px; font-size: 14px; font-weight: 600; }
+  .card .addbtn:active { background: #2a2a36; }
 
   .empty { color: var(--muted); text-align: center; padding: 48px 20px; font-size: 14px; line-height: 1.6; }
   .empty b { color: var(--text); }
+  .spinner { text-align: center; color: var(--muted); padding: 28px; font-size: 14px; }
 
   /* Player overlay */
-  #player-view {
-    position: fixed; inset: 0; background: #000; z-index: 50;
-    display: none; flex-direction: column;
-  }
+  #player-view { position: fixed; inset: 0; background: #000; z-index: 50; display: none; flex-direction: column; }
   #player-view.open { display: flex; }
-  #player-top {
-    display: flex; align-items: center; gap: 10px; padding: calc(env(safe-area-inset-top) + 8px) 14px 8px;
-    background: linear-gradient(#000, rgba(0,0,0,0));
-  }
-  #player-top button.back {
-    background: rgba(255,255,255,.12); color: #fff; border: none; border-radius: 10px;
-    padding: 8px 14px; font-size: 15px; font-weight: 600;
-  }
-  #player-top .ptitle {
-    font-size: 13px; color: #d8d8de; flex: 1; min-width: 0;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
+  #player-top { display: flex; align-items: center; gap: 10px; padding: calc(env(safe-area-inset-top) + 8px) 14px 8px;
+    background: linear-gradient(#000, rgba(0,0,0,0)); }
+  #player-top button.back { background: rgba(255,255,255,.12); color: #fff; border: none; border-radius: 10px;
+    padding: 8px 14px; font-size: 15px; font-weight: 600; }
+  #player-top .ptitle { font-size: 13px; color: #d8d8de; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #player-stage { flex: 1; display: grid; place-items: center; background: #000; }
   #player-wrap { width: 100%; aspect-ratio: 16 / 9; }
   #ytplayer { width: 100%; height: 100%; border: 0; }
-  #saveflash {
-    position: fixed; left: 50%; transform: translateX(-50%);
-    bottom: calc(env(safe-area-inset-bottom) + 16px);
-    background: rgba(20,20,26,.92); color: #fff; font-size: 12px; padding: 7px 12px;
-    border-radius: 999px; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 60;
-  }
+  #saveflash { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 16px);
+    background: rgba(20,20,26,.92); color: #fff; font-size: 12px; padding: 7px 12px; border-radius: 999px;
+    opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 60; }
   #saveflash.show { opacity: 1; }
-
-  .toast {
-    position: fixed; left: 50%; transform: translateX(-50%);
-    bottom: calc(env(safe-area-inset-bottom) + 20px);
-    background: #23232e; color: #fff; padding: 10px 16px; border-radius: 12px;
-    font-size: 14px; z-index: 70; opacity: 0; transition: opacity .2s; pointer-events: none;
-    max-width: 90vw; text-align: center;
-  }
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 20px);
+    background: #23232e; color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 14px; z-index: 70;
+    opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 90vw; text-align: center; }
   .toast.show { opacity: 1; }
 </style>
 </head>
 <body>
 
 <header>
-  <div class="logo">
-    <svg viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
-  </div>
+  <div class="logo"><svg viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg></div>
   <div>
     <h1>Watch Later</h1>
     <div class="sub">Just the video. Resumes where you left off.</div>
   </div>
+  <button class="gear" id="gear-btn" title="Settings">⚙</button>
 </header>
 
 <div class="add-bar">
-  <input id="url-input" type="url" inputmode="url" autocomplete="off" autocapitalize="off"
-         spellcheck="false" placeholder="Paste a YouTube link…" />
-  <button id="add-btn">Add</button>
+  <input id="url-input" type="search" inputmode="search" autocomplete="off" autocapitalize="off"
+         spellcheck="false" placeholder="Search YouTube, or paste a link…" />
+  <button id="add-btn">Go</button>
 </div>
+<div class="hint">Type words to search · paste a link to add it directly</div>
 
 <main>
+  <!-- search results -->
+  <div class="section-label" id="results-label" style="display:none">
+    <span id="results-title">Results</span>
+    <button class="clear" id="results-clear">Clear</button>
+  </div>
+  <ul class="list" id="results"></ul>
+  <div class="spinner" id="searching" style="display:none">Searching YouTube…</div>
+
+  <!-- saved library -->
   <div class="section-label" id="list-label" style="display:none">Your videos</div>
   <ul class="list" id="list"></ul>
   <div class="empty" id="empty">
     <b>No videos yet.</b><br />
-    Paste a YouTube link above, or share a video to this app
-    from the YouTube app using the Shortcut (see the README).
+    Search for a video above, paste a YouTube link, or share one to this app
+    from the YouTube app (see the README).
   </div>
 </main>
 
@@ -179,72 +150,54 @@
     <button class="back" id="back-btn">‹ Done</button>
     <div class="ptitle" id="ptitle"></div>
   </div>
-  <div id="player-stage">
-    <div id="player-wrap"><div id="ytplayer"></div></div>
-  </div>
+  <div id="player-stage"><div id="player-wrap"><div id="ytplayer"></div></div></div>
 </div>
 
 <div id="saveflash">position saved</div>
 <div class="toast" id="toast"></div>
 
 <script>
-/* ---------- tiny storage layer ---------- */
+/* ===================== storage ===================== */
 const STORE_KEY = 'wl.videos.v1';
-/** video = { id, title, time, duration, addedAt, updatedAt, done } */
-function loadAll() {
-  try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }
-  catch (e) { return {}; }
-}
+const KEY_APIKEY = 'wl.youtube.apikey';
+function loadAll() { try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch (e) { return {}; } }
 function saveAll(map) { localStorage.setItem(STORE_KEY, JSON.stringify(map)); }
 function upsert(patch) {
-  const map = loadAll();
-  const prev = map[patch.id] || {};
+  const map = loadAll(); const prev = map[patch.id] || {};
   map[patch.id] = Object.assign({ addedAt: Date.now() }, prev, patch, { updatedAt: Date.now() });
-  saveAll(map);
-  return map[patch.id];
+  saveAll(map); return map[patch.id];
 }
 function removeVideo(id) { const m = loadAll(); delete m[id]; saveAll(m); }
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 
-/* Ask iOS/Chrome to keep our data from being evicted */
-if (navigator.storage && navigator.storage.persist) {
-  navigator.storage.persist().catch(() => {});
-}
-
-/* ---------- helpers ---------- */
+/* ===================== helpers ===================== */
 function parseVideo(input) {
-  if (!input) return null;
-  input = input.trim();
-  // bare 11-char id
+  if (!input) return null; input = input.trim();
   if (/^[\w-]{11}$/.test(input)) return { id: input, start: 0 };
   let url;
-  try { url = new URL(input); }
-  catch (e) {
-    // maybe missing protocol
+  try { url = new URL(input); } catch (e) {
     try { url = new URL('https://' + input); } catch (e2) { return null; }
   }
-  let id = null;
-  const host = url.hostname.replace(/^www\./, '');
+  let id = null; const host = url.hostname.replace(/^www\./, '');
   if (host === 'youtu.be') id = url.pathname.slice(1).split('/')[0];
   else if (host.endsWith('youtube.com') || host.endsWith('youtube-nocookie.com')) {
     if (url.searchParams.get('v')) id = url.searchParams.get('v');
-    else {
-      const m = url.pathname.match(/\/(embed|shorts|v|live)\/([\w-]{11})/);
-      if (m) id = m[2];
-    }
+    else { const m = url.pathname.match(/\/(embed|shorts|v|live)\/([\w-]{11})/); if (m) id = m[2]; }
   }
   if (!id || !/^[\w-]{11}$/.test(id)) return null;
-  // start time from &t= / start=
-  let start = 0;
-  const t = url.searchParams.get('t') || url.searchParams.get('start');
+  let start = 0; const t = url.searchParams.get('t') || url.searchParams.get('start');
   if (t) start = parseTime(t);
   return { id, start };
 }
+// Does this text even look like a link/id? (vs. a search query)
+function looksLikeLink(s) {
+  s = (s || '').trim();
+  return /^[\w-]{11}$/.test(s) || /youtu\.?be|youtube\.com/i.test(s) || /^https?:\/\//i.test(s);
+}
 function parseTime(t) {
   if (/^\d+$/.test(t)) return parseInt(t, 10);
-  let s = 0; const m = String(t).match(/(\d+)h/); const mm = String(t).match(/(\d+)m/); const ss = String(t).match(/(\d+)s/);
-  if (m) s += parseInt(m[1]) * 3600;
-  if (mm) s += parseInt(mm[1]) * 60;
-  if (ss) s += parseInt(ss[1]);
+  let s = 0; const h = String(t).match(/(\d+)h/), m = String(t).match(/(\d+)m/), ss = String(t).match(/(\d+)s/);
+  if (h) s += parseInt(h[1]) * 3600; if (m) s += parseInt(m[1]) * 60; if (ss) s += parseInt(ss[1]);
   return s || 0;
 }
 function fmt(sec) {
@@ -254,12 +207,12 @@ function fmt(sec) {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 function toast(msg) {
-  const el = document.getElementById('toast');
-  el.textContent = msg; el.classList.add('show');
-  clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('show'), 2200);
+  const el = document.getElementById('toast'); el.textContent = msg; el.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('show'), 2400);
 }
+function thumbUrl(id) { return `https://i.ytimg.com/vi/${id}/mqdefault.jpg`; }
 
-/* ---------- library rendering ---------- */
+/* ===================== library rendering ===================== */
 const listEl = document.getElementById('list');
 const emptyEl = document.getElementById('empty');
 const labelEl = document.getElementById('list-label');
@@ -268,38 +221,26 @@ function render() {
   const map = loadAll();
   const items = Object.values(map).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   listEl.innerHTML = '';
-  if (!items.length) { emptyEl.style.display = ''; labelEl.style.display = 'none'; return; }
+  const showingResults = document.getElementById('results').children.length > 0;
+  if (!items.length) {
+    emptyEl.style.display = showingResults ? 'none' : '';
+    labelEl.style.display = 'none'; return;
+  }
   emptyEl.style.display = 'none'; labelEl.style.display = '';
-
   for (const v of items) {
-    const li = document.createElement('li');
-    li.className = 'card';
-
-    const tw = document.createElement('div');
-    tw.className = 'thumb-wrap';
-    const img = document.createElement('img');
-    img.className = 'thumb'; img.loading = 'lazy';
-    img.src = `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`;
+    const li = document.createElement('li'); li.className = 'card';
+    const tw = document.createElement('div'); tw.className = 'thumb-wrap';
+    const img = document.createElement('img'); img.className = 'thumb'; img.loading = 'lazy'; img.src = thumbUrl(v.id);
     tw.appendChild(img);
     const pct = v.duration ? Math.min(100, (v.time / v.duration) * 100) : 0;
-    if (v.time > 2) {
-      const bar = document.createElement('div'); bar.className = 'pct';
-      const sp = document.createElement('span'); sp.style.width = pct + '%'; bar.appendChild(sp);
-      tw.appendChild(bar);
-    }
-    if (v.duration) {
-      const b = document.createElement('div'); b.className = 'badge'; b.textContent = fmt(v.duration);
-      tw.appendChild(b);
-    }
+    if (v.time > 2) { const bar = document.createElement('div'); bar.className = 'pct';
+      const sp = document.createElement('span'); sp.style.width = pct + '%'; bar.appendChild(sp); tw.appendChild(bar); }
+    if (v.duration) { const b = document.createElement('div'); b.className = 'badge'; b.textContent = fmt(v.duration); tw.appendChild(b); }
     li.appendChild(tw);
 
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-    const title = document.createElement('div');
-    title.className = 'title';
-    title.textContent = v.title || 'YouTube video';
+    const meta = document.createElement('div'); meta.className = 'meta';
+    const title = document.createElement('div'); title.className = 'title'; title.textContent = v.title || 'YouTube video';
     meta.appendChild(title);
-
     const row2 = document.createElement('div'); row2.className = 'row2';
     const status = document.createElement('div'); status.className = 'status';
     if (v.done) { status.textContent = '✓ Finished'; status.classList.add('done'); }
@@ -307,43 +248,198 @@ function render() {
     else if (v.time > 2) status.textContent = `Resume at ${fmt(v.time)}`;
     else status.textContent = 'Not started';
     row2.appendChild(status);
+    meta.appendChild(row2); li.appendChild(meta);
 
-    const del = document.createElement('button');
-    del.className = 'del'; del.innerHTML = '&times;'; del.title = 'Remove';
-    del.addEventListener('click', (e) => {
-      e.stopPropagation();
-      removeVideo(v.id); render();
-    });
-    row2.appendChild(del);
-    meta.appendChild(row2);
-    li.appendChild(meta);
+    const del = document.createElement('button'); del.className = 'del'; del.innerHTML = '&times;'; del.title = 'Remove';
+    del.addEventListener('click', (e) => { e.stopPropagation(); removeVideo(v.id); render(); });
+    li.appendChild(del);
 
     li.addEventListener('click', () => openPlayer(v.id));
     listEl.appendChild(li);
   }
 }
 
-/* ---------- add flow ---------- */
-const input = document.getElementById('url-input');
-function addFromInput(raw, autoplay) {
-  const parsed = parseVideo(raw);
-  if (!parsed) { toast('Hmm, that doesn’t look like a YouTube link.'); return null; }
-  const map = loadAll();
-  const existing = map[parsed.id];
-  if (!existing) {
-    upsert({ id: parsed.id, time: parsed.start || 0, title: '', duration: 0, done: false });
-    fetchTitle(parsed.id);
+/* ===================== search ===================== */
+const resultsEl = document.getElementById('results');
+const resultsLabel = document.getElementById('results-label');
+const resultsTitle = document.getElementById('results-title');
+const searchingEl = document.getElementById('searching');
+
+// Public no-key fallbacks. These are community-run YouTube front-ends; instances
+// come and go, so we try several. (Add a YouTube API key in ⚙ for rock-solid search.)
+const PIPED_APIS = [
+  'https://pipedapi.kavin.rocks',
+  'https://pipedapi.adminforge.de',
+  'https://api.piped.yt',
+  'https://pipedapi.leptons.xyz'
+];
+const INVIDIOUS_APIS = [
+  'https://yewtu.be',
+  'https://invidious.nerdvpn.de',
+  'https://invidious.fdn.fr',
+  'https://inv.nadeko.net'
+];
+
+function fetchWithTimeout(url, ms) {
+  const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(t));
+}
+
+async function searchYouTube(query) {
+  const apiKey = localStorage.getItem(KEY_APIKEY);
+  if (apiKey) {
+    const r = await searchOfficial(query, apiKey);
+    if (r) return r;
   }
-  render();
-  input.value = '';
-  if (autoplay) openPlayer(parsed.id);
-  else toast(existing ? 'Already in your list' : 'Added ✓');
+  // fallbacks
+  for (const base of PIPED_APIS) {
+    try {
+      const res = await fetchWithTimeout(`${base}/search?q=${encodeURIComponent(query)}&filter=videos`, 7000);
+      if (!res.ok) continue;
+      const data = await res.json();
+      const items = (data.items || data || []).filter(x => x && (x.url || x.id) && (x.type ? x.type === 'stream' : true));
+      const out = items.map(x => {
+        const id = (x.url || '').replace('/watch?v=', '') || x.id;
+        return id && id.length === 11 ? {
+          id, title: x.title, channel: x.uploaderName || x.uploader || '',
+          duration: x.duration > 0 ? x.duration : 0
+        } : null;
+      }).filter(Boolean);
+      if (out.length) return out;
+    } catch (e) { /* try next */ }
+  }
+  for (const base of INVIDIOUS_APIS) {
+    try {
+      const res = await fetchWithTimeout(`${base}/api/v1/search?q=${encodeURIComponent(query)}&type=video`, 7000);
+      if (!res.ok) continue;
+      const data = await res.json();
+      const out = (data || []).filter(x => x.type === 'video' && x.videoId).map(x => ({
+        id: x.videoId, title: x.title, channel: x.author || '',
+        duration: x.lengthSeconds > 0 ? x.lengthSeconds : 0
+      }));
+      if (out.length) return out;
+    } catch (e) { /* try next */ }
+  }
+  return null; // everything failed
+}
+
+async function searchOfficial(query, apiKey) {
+  try {
+    const u = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=20&q=${encodeURIComponent(query)}&key=${apiKey}`;
+    const res = await fetchWithTimeout(u, 8000);
+    if (!res.ok) { if (res.status === 403) toast('API key rejected — check it in ⚙'); return null; }
+    const data = await res.json();
+    const ids = [], base = (data.items || []).map(it => {
+      const id = it.id && it.id.videoId; if (id) ids.push(id);
+      return id ? { id, title: it.snippet.title, channel: it.snippet.channelTitle, duration: 0 } : null;
+    }).filter(Boolean);
+    // second cheap call to get durations
+    if (ids.length) {
+      try {
+        const u2 = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${ids.join(',')}&key=${apiKey}`;
+        const r2 = await fetchWithTimeout(u2, 8000);
+        if (r2.ok) {
+          const d2 = await r2.json(); const dur = {};
+          (d2.items || []).forEach(it => dur[it.id] = isoDuration(it.contentDetails.duration));
+          base.forEach(b => b.duration = dur[b.id] || 0);
+        }
+      } catch (e) {}
+    }
+    return base;
+  } catch (e) { return null; }
+}
+function isoDuration(iso) {
+  const m = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(iso || ''); if (!m) return 0;
+  return (parseInt(m[1] || 0) * 3600) + (parseInt(m[2] || 0) * 60) + parseInt(m[3] || 0);
+}
+
+let searchSeq = 0;
+async function doSearch(query) {
+  query = query.trim(); if (!query) return;
+  const seq = ++searchSeq;
+  resultsEl.innerHTML = ''; render();
+  resultsLabel.style.display = 'flex';
+  resultsTitle.textContent = `Results for “${query}”`;
+  searchingEl.style.display = '';
+  let results = null;
+  try { results = await searchYouTube(query); } catch (e) {}
+  if (seq !== searchSeq) return; // a newer search superseded this one
+  searchingEl.style.display = 'none';
+  if (!results || !results.length) {
+    resultsEl.innerHTML = '';
+    const li = document.createElement('li'); li.className = 'card';
+    li.style.display = 'block'; li.style.color = 'var(--muted)'; li.style.fontSize = '13px'; li.style.lineHeight = '1.6';
+    li.innerHTML = results === null
+      ? 'Search is unavailable right now. Add a free <b>YouTube API key</b> in ⚙ for reliable search, or just paste a video link in the box above.'
+      : 'No results found. Try different words.';
+    resultsEl.appendChild(li);
+    return;
+  }
+  renderResults(results);
+}
+
+function renderResults(results) {
+  resultsEl.innerHTML = '';
+  for (const r of results) {
+    const li = document.createElement('li'); li.className = 'card';
+    const tw = document.createElement('div'); tw.className = 'thumb-wrap';
+    const img = document.createElement('img'); img.className = 'thumb'; img.loading = 'lazy'; img.src = thumbUrl(r.id);
+    tw.appendChild(img);
+    if (r.duration) { const b = document.createElement('div'); b.className = 'badge'; b.textContent = fmt(r.duration); tw.appendChild(b); }
+    li.appendChild(tw);
+
+    const meta = document.createElement('div'); meta.className = 'meta';
+    const title = document.createElement('div'); title.className = 'title'; title.textContent = r.title || 'YouTube video';
+    meta.appendChild(title);
+    if (r.channel) { const ch = document.createElement('div'); ch.className = 'channel'; ch.textContent = r.channel; meta.appendChild(ch); }
+    li.appendChild(meta);
+
+    const add = document.createElement('button'); add.className = 'addbtn'; add.textContent = '＋';
+    add.title = 'Add without playing';
+    add.addEventListener('click', (e) => {
+      e.stopPropagation();
+      upsert({ id: r.id, title: r.title || '', duration: r.duration || 0, time: 0, done: false });
+      render(); toast('Added ✓');
+    });
+    li.appendChild(add);
+
+    // tap the thumbnail/title = add + play now
+    const playNow = () => {
+      const existing = loadAll()[r.id];
+      if (!existing) upsert({ id: r.id, title: r.title || '', duration: r.duration || 0, time: 0, done: false });
+      openPlayer(r.id);
+    };
+    tw.addEventListener('click', playNow);
+    meta.addEventListener('click', playNow);
+    resultsEl.appendChild(li);
+  }
+}
+
+function clearResults() {
+  resultsEl.innerHTML = ''; resultsLabel.style.display = 'none'; searchingEl.style.display = 'none';
+  searchSeq++; render();
+}
+document.getElementById('results-clear').addEventListener('click', () => { clearResults(); input.value = ''; });
+
+/* ===================== add / submit ===================== */
+const input = document.getElementById('url-input');
+function addLink(raw, autoplay) {
+  const parsed = parseVideo(raw);
+  if (!parsed) { toast('That doesn’t look like a YouTube link.'); return null; }
+  const map = loadAll(); const existing = map[parsed.id];
+  if (!existing) { upsert({ id: parsed.id, time: parsed.start || 0, title: '', duration: 0, done: false }); fetchTitle(parsed.id); }
+  render(); input.value = '';
+  if (autoplay) openPlayer(parsed.id); else toast(existing ? 'Already in your list' : 'Added ✓');
   return parsed.id;
 }
-document.getElementById('add-btn').addEventListener('click', () => addFromInput(input.value, true));
-input.addEventListener('keydown', (e) => { if (e.key === 'Enter') addFromInput(input.value, true); });
+function submit() {
+  const raw = input.value.trim(); if (!raw) return;
+  if (looksLikeLink(raw)) addLink(raw, true);
+  else doSearch(raw);
+}
+document.getElementById('add-btn').addEventListener('click', submit);
+input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); submit(); } });
 
-/* Grab a human title via YouTube's public oEmbed endpoint (no API key) */
 function fetchTitle(id) {
   fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${id}&format=json`)
     .then(r => r.ok ? r.json() : null)
@@ -351,123 +447,91 @@ function fetchTitle(id) {
     .catch(() => {});
 }
 
-/* ---------- the player ---------- */
+/* ===================== settings (API key) ===================== */
+document.getElementById('gear-btn').addEventListener('click', () => {
+  const cur = localStorage.getItem(KEY_APIKEY) || '';
+  const msg = 'Optional: paste a free YouTube Data API key for fast, reliable search.\n' +
+              '(Leave blank to use public search. See the README for how to get a key.)\n\n' +
+              'Current: ' + (cur ? cur.slice(0, 6) + '…' : '(none)');
+  const val = prompt(msg, cur);
+  if (val === null) return;
+  const v = val.trim();
+  if (v) { localStorage.setItem(KEY_APIKEY, v); toast('API key saved ✓'); }
+  else { localStorage.removeItem(KEY_APIKEY); toast('API key cleared'); }
+});
+
+/* ===================== player ===================== */
 let player = null, currentId = null, saveTimer = null, apiReady = false, pendingId = null;
-
 window.onYouTubeIframeAPIReady = function () {
-  apiReady = true;
-  if (pendingId) { const id = pendingId; pendingId = null; openPlayer(id); }
+  apiReady = true; if (pendingId) { const id = pendingId; pendingId = null; openPlayer(id); }
 };
-
 function openPlayer(id) {
-  currentId = id;
-  const v = loadAll()[id] || { id };
+  currentId = id; const v = loadAll()[id] || { id };
   document.getElementById('ptitle').textContent = v.title || 'YouTube video';
   document.getElementById('player-view').classList.add('open');
-
-  // Start near the saved spot; if "finished", start from beginning
   let startAt = (v.done ? 0 : Math.max(0, Math.floor((v.time || 0) - 2)));
-
   if (!apiReady) { pendingId = id; return; }
-
-  if (player && player.loadVideoById) {
-    player.loadVideoById({ videoId: id, startSeconds: startAt });
-  } else {
+  if (player && player.loadVideoById) player.loadVideoById({ videoId: id, startSeconds: startAt });
+  else {
     player = new YT.Player('ytplayer', {
       videoId: id,
-      playerVars: {
-        autoplay: 1, playsinline: 1, controls: 1, rel: 0,
-        modestbranding: 1, iv_load_policy: 3, fs: 1, start: startAt
-      },
-      events: {
-        onReady: (e) => { e.target.playVideo(); startSaving(); },
-        onStateChange: onState
-      }
+      playerVars: { autoplay: 1, playsinline: 1, controls: 1, rel: 0, modestbranding: 1, iv_load_policy: 3, fs: 1, start: startAt },
+      events: { onReady: (e) => { e.target.playVideo(); startSaving(); }, onStateChange: onState }
     });
   }
   startSaving();
 }
-
 function onState(e) {
-  // 0 = ended, 1 = playing, 2 = paused
   if (e.data === YT.PlayerState.PLAYING) {
-    // capture duration + title once known
     const d = player.getDuration ? player.getDuration() : 0;
     const data = player.getVideoData ? player.getVideoData() : null;
-    const patch = { id: currentId };
+    const patch = { id: currentId, done: false };
     if (d) patch.duration = d;
     if (data && data.title) { patch.title = data.title; document.getElementById('ptitle').textContent = data.title; }
-    patch.done = false;
     upsert(patch);
   }
   if (e.data === YT.PlayerState.PAUSED) saveProgress(true);
   if (e.data === YT.PlayerState.ENDED) {
     const d = player.getDuration ? player.getDuration() : 0;
-    upsert({ id: currentId, time: 0, duration: d || undefined, done: true });
-    render();
-    flashSaved('finished ✓');
+    upsert({ id: currentId, time: 0, duration: d || undefined, done: true }); render(); flashSaved('finished ✓');
   }
 }
-
-function startSaving() {
-  clearInterval(saveTimer);
-  saveTimer = setInterval(() => saveProgress(false), 4000);
-}
+function startSaving() { clearInterval(saveTimer); saveTimer = setInterval(() => saveProgress(false), 4000); }
 function saveProgress(flash) {
   if (!player || !player.getCurrentTime || !currentId) return;
   let t = 0, d = 0;
   try { t = player.getCurrentTime(); d = player.getDuration(); } catch (e) { return; }
-  if (!t && t !== 0) return;
+  if (t == null) return;
   const nearEnd = d && t >= d - 3;
   upsert({ id: currentId, time: nearEnd ? 0 : t, duration: d || undefined, done: !!nearEnd });
   if (flash) flashSaved('position saved');
 }
 function flashSaved(text) {
-  const el = document.getElementById('saveflash');
-  el.textContent = text || 'position saved';
-  el.classList.add('show');
-  clearTimeout(flashSaved._t);
-  flashSaved._t = setTimeout(() => el.classList.remove('show'), 1100);
+  const el = document.getElementById('saveflash'); el.textContent = text || 'position saved'; el.classList.add('show');
+  clearTimeout(flashSaved._t); flashSaved._t = setTimeout(() => el.classList.remove('show'), 1100);
 }
-
 function closePlayer() {
-  saveProgress(false);
-  clearInterval(saveTimer);
+  saveProgress(false); clearInterval(saveTimer);
   try { if (player && player.pauseVideo) player.pauseVideo(); } catch (e) {}
-  document.getElementById('player-view').classList.remove('open');
-  currentId = null;
-  render();
+  document.getElementById('player-view').classList.remove('open'); currentId = null; render();
 }
 document.getElementById('back-btn').addEventListener('click', closePlayer);
-
-/* Save aggressively on the events that matter on iPhone:
-   screen lock, app switch, closing the tab/app. */
 document.addEventListener('visibilitychange', () => { if (document.hidden) saveProgress(false); });
 window.addEventListener('pagehide', () => saveProgress(false));
 window.addEventListener('blur', () => saveProgress(false));
 
-/* ---------- "send myself a video" entry point ----------
-   Opening the app at  ?v=VIDEO_ID  (or ?url=...) adds + plays it.
-   This is what the iOS Shortcut hits from the YouTube share sheet. */
+/* ===================== incoming share URL ===================== */
 function handleIncomingURL() {
   const q = new URLSearchParams(location.search);
   const raw = q.get('v') || q.get('url') || q.get('add');
-  if (raw) {
-    const id = addFromInput(raw, true);
-    // clean the URL so a refresh doesn't re-trigger
-    if (id) history.replaceState(null, '', location.pathname);
-  }
+  const search = q.get('q') || q.get('search');
+  if (raw) { const id = addLink(raw, true); if (id) history.replaceState(null, '', location.pathname); }
+  else if (search) { input.value = search; history.replaceState(null, '', location.pathname); doSearch(search); }
 }
 
-/* ---------- boot ---------- */
-function loadYouTubeAPI() {
-  const s = document.createElement('script');
-  s.src = 'https://www.youtube.com/iframe_api';
-  document.head.appendChild(s);
-}
-render();
-loadYouTubeAPI();
-handleIncomingURL();
+/* ===================== boot ===================== */
+function loadYouTubeAPI() { const s = document.createElement('script'); s.src = 'https://www.youtube.com/iframe_api'; document.head.appendChild(s); }
+render(); loadYouTubeAPI(); handleIncomingURL();
 </script>
 </body>
 </html>
