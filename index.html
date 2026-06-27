@@ -222,23 +222,21 @@ async function loadOfflineSet() {
 const dlProgress = {}, dlControllers = {};
 
 async function getStreamInfo(id) {
+  // --- Try Invidious (combined progressive or adaptive, proxied through instance) ---
   for (const base of INVIDIOUS_APIS) {
     try {
-      const res = await fetchWithTimeout(`${base}/api/v1/videos/${id}?local=true`, 15000);
-      if (!res.ok) { console.warn('[dl]', base, res.status); continue; }
+      const res = await fetchWithTimeout(`${base}/api/v1/videos/${id}?local=true`, 10000);
+      if (!res.ok) { console.warn('[dl inv]', base, res.status); continue; }
       const data = await res.json();
 
-      // Combined progressive stream (legacy itag 18/22) — simplest to play
+      // Combined progressive stream (legacy itag 18/22)
       const fmts = data.formatStreams || [];
-      const c = fmts.find(s => s.qualityLabel === '720p') ||
-                fmts.find(s => s.qualityLabel === '480p') ||
-                fmts.find(s => s.qualityLabel === '360p') ||
-                fmts[0];
+      const c = fmts.find(s => s.qualityLabel === '720p') || fmts.find(s => s.qualityLabel === '480p') ||
+                fmts.find(s => s.qualityLabel === '360p') || fmts[0];
       if (c?.url) return { type: 'combined', url: c.url, mime: (c.mimeType || 'video/mp4').split(';')[0] };
 
-      // Adaptive streams — separate video + audio (most modern videos)
+      // Adaptive — prefer MP4 (H.264 + AAC) for iOS
       const adaptive = data.adaptiveFormats || [];
-      // Prefer MP4 (H.264 + AAC) for widest device support, especially iOS
       const vMp4 = adaptive.filter(s => s.type?.startsWith('video/mp4') && s.qualityLabel);
       const aMp4 = adaptive.filter(s => s.type?.startsWith('audio/mp4'));
       if (vMp4.length && aMp4.length) {
@@ -247,16 +245,47 @@ async function getStreamInfo(id) {
         const a = aMp4.sort((x, y) => (y.bitrate || 0) - (x.bitrate || 0))[0];
         if (v?.url && a?.url) return { type: 'adaptive', videoUrl: v.url, videoMime: v.type, audioUrl: a.url, audioMime: a.type };
       }
-      // WebM fallback (VP9 + Opus)
+      // WebM fallback
       const vWebm = adaptive.filter(s => s.type?.startsWith('video/webm') && s.qualityLabel);
       const aWebm = adaptive.filter(s => s.type?.startsWith('audio/webm'));
       if (vWebm.length && aWebm.length) {
         const v = vWebm.find(s => s.qualityLabel === '720p') || vWebm.find(s => s.qualityLabel === '480p') || vWebm[0];
         if (v?.url && aWebm[0]?.url) return { type: 'adaptive', videoUrl: v.url, videoMime: v.type, audioUrl: aWebm[0].url, audioMime: aWebm[0].type };
       }
-      console.warn('[dl]', base, 'no usable streams');
-    } catch (e) { console.warn('[dl]', base, e.message); }
+      console.warn('[dl inv]', base, 'no usable streams in response');
+    } catch (e) { console.warn('[dl inv]', base, e.message); }
   }
+
+  // --- Piped fallback (separate video + audio, proxied through pipedproxy) ---
+  for (const base of PIPED_APIS) {
+    try {
+      const res = await fetchWithTimeout(`${base}/streams/${id}`, 10000);
+      if (!res.ok) { console.warn('[dl piped]', base, res.status); continue; }
+      const data = await res.json();
+      if (data.error) { console.warn('[dl piped]', base, data.error); continue; }
+
+      const vAll = (data.videoStreams || []).filter(s => s.url);
+      const aAll = (data.audioStreams || []).filter(s => s.url);
+
+      // Prefer H.264 (avc1) MP4 video — widest support including iOS
+      const pickV = q => vAll.find(s => s.mimeType?.includes('avc1') && s.quality?.includes(q)) ||
+                         vAll.find(s => s.mimeType?.includes('mp4') && s.quality?.includes(q));
+      const v = pickV('720') || pickV('480') || pickV('360') ||
+                vAll.find(s => s.mimeType?.includes('avc1')) || vAll.find(s => s.mimeType?.includes('mp4')) || vAll[0];
+      // Prefer AAC audio
+      const a = aAll.find(s => s.mimeType?.includes('mp4')) || aAll[0];
+
+      if (v?.url && a?.url) {
+        return {
+          type: 'adaptive',
+          videoUrl: v.url, videoMime: v.mimeType || 'video/mp4',
+          audioUrl: a.url, audioMime: a.mimeType || 'audio/mp4'
+        };
+      }
+      console.warn('[dl piped]', base, 'no usable streams');
+    } catch (e) { console.warn('[dl piped]', base, e.message); }
+  }
+
   return null;
 }
 
