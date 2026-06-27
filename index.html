@@ -105,6 +105,17 @@
     background: #23232e; color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 14px; z-index: 70;
     opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 90vw; text-align: center; }
   .toast.show { opacity: 1; }
+
+  /* Offline download button on saved cards */
+  .card .dlbtn { align-self: center; flex: none; background: var(--panel-2); border: 1px solid #2f2f3c;
+    color: var(--muted); border-radius: 10px; padding: 6px 9px; font-size: 13px; min-width: 36px;
+    text-align: center; line-height: 1; margin-right: 2px; }
+  .card .dlbtn.dling { color: var(--accent-2); border-color: var(--accent-2); font-size: 11px; }
+  .card .dlbtn.done { color: var(--ok); border-color: var(--ok); }
+  .card .dlbtn:active { opacity: .7; }
+  /* Offline indicator badge on thumbnail */
+  .thumb-wrap .off-badge { position: absolute; left: 4px; bottom: 8px; background: rgba(52,199,89,.85);
+    color: #fff; font-size: 10px; padding: 1px 4px; border-radius: 4px; }
 </style>
 </head>
 <body>
@@ -150,13 +161,136 @@
     <button class="back" id="back-btn">‹ Done</button>
     <div class="ptitle" id="ptitle"></div>
   </div>
-  <div id="player-stage"><div id="player-wrap"><div id="ytplayer"></div></div></div>
+  <div id="player-stage"><div id="player-wrap">
+    <div id="ytplayer"></div>
+    <video id="localvideo" style="display:none;width:100%;height:100%;background:#000" controls playsinline></video>
+  </div></div>
 </div>
 
 <div id="saveflash">position saved</div>
 <div class="toast" id="toast"></div>
 
 <script>
+/* ===================== offline storage (IndexedDB) ===================== */
+const IDB_NAME = 'wl.offline.v1', IDB_STORE = 'blobs';
+let _idb = null;
+function getIDB() {
+  if (_idb) return Promise.resolve(_idb);
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(IDB_NAME, 1);
+    r.onupgradeneeded = e => e.target.result.createObjectStore(IDB_STORE);
+    r.onsuccess = e => { _idb = e.target.result; res(_idb); };
+    r.onerror = () => rej(r.error);
+  });
+}
+function idbPut(id, blob) {
+  return getIDB().then(db => new Promise((res, rej) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(blob, id);
+    tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+  }));
+}
+function idbGet(id) {
+  return getIDB().then(db => new Promise((res, rej) => {
+    const req = db.transaction(IDB_STORE).objectStore(IDB_STORE).get(id);
+    req.onsuccess = () => res(req.result || null); req.onerror = () => rej(req.error);
+  }));
+}
+function idbDel(id) {
+  return getIDB().then(db => new Promise((res, rej) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).delete(id);
+    tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+  }));
+}
+function idbKeys() {
+  return getIDB().then(db => new Promise((res, rej) => {
+    const req = db.transaction(IDB_STORE).objectStore(IDB_STORE).getAllKeys();
+    req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error);
+  }));
+}
+
+let offlineSet = new Set();
+async function loadOfflineSet() {
+  try { offlineSet = new Set(await idbKeys()); } catch (e) { offlineSet = new Set(); }
+}
+
+const dlProgress = {}, dlControllers = {};
+
+async function getStreamUrl(id) {
+  for (const base of INVIDIOUS_APIS) {
+    try {
+      const res = await fetchWithTimeout(`${base}/api/v1/videos/${id}?local=true`, 12000);
+      if (!res.ok) continue;
+      const data = await res.json();
+      const streams = data.formatStreams || [];
+      const pick = streams.find(s => s.qualityLabel === '720p') ||
+                   streams.find(s => s.qualityLabel === '480p') ||
+                   streams.find(s => s.qualityLabel === '360p') ||
+                   streams[0];
+      if (pick && pick.url) return { url: pick.url, mime: (pick.mimeType || 'video/mp4').split(';')[0] };
+    } catch (e) { /* try next instance */ }
+  }
+  return null;
+}
+
+async function downloadVideo(id) {
+  if (id in dlProgress) return;
+  dlProgress[id] = 0;
+  dlControllers[id] = new AbortController();
+  updateDlBtn(id);
+  try {
+    const stream = await getStreamUrl(id);
+    if (!stream) throw new Error('no stream');
+    const res = await fetch(stream.url, { signal: dlControllers[id].signal });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const total = +res.headers.get('content-length') || 0;
+    const reader = res.body.getReader();
+    const chunks = []; let got = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value); got += value.byteLength;
+      if (total) {
+        const pct = Math.round(got / total * 100);
+        if (pct !== dlProgress[id]) { dlProgress[id] = pct; updateDlBtn(id); }
+      }
+    }
+    await idbPut(id, new Blob(chunks, { type: stream.mime }));
+    offlineSet.add(id);
+    delete dlProgress[id]; delete dlControllers[id];
+    render(); toast('Saved for offline ✓');
+  } catch (e) {
+    delete dlProgress[id]; delete dlControllers[id];
+    if (e.name !== 'AbortError') toast('Download failed — try a different video or instance');
+    updateDlBtn(id);
+  }
+}
+
+function cancelDownload(id) {
+  if (dlControllers[id]) { dlControllers[id].abort(); }
+  delete dlProgress[id]; delete dlControllers[id];
+  updateDlBtn(id);
+}
+
+async function deleteOffline(id) {
+  await idbDel(id); offlineSet.delete(id);
+  render(); toast('Local copy removed');
+}
+
+function updateDlBtn(id) {
+  const btn = document.querySelector(`[data-dlid="${id}"]`);
+  if (!btn) return;
+  if (id in dlProgress) {
+    btn.textContent = dlProgress[id] > 0 ? dlProgress[id] + '%' : '…';
+    btn.className = 'dlbtn dling'; btn.title = 'Tap to cancel';
+  } else if (offlineSet.has(id)) {
+    btn.textContent = '⊗'; btn.className = 'dlbtn done'; btn.title = 'Remove downloaded copy';
+  } else {
+    btn.textContent = '⬇'; btn.className = 'dlbtn'; btn.title = 'Download for offline playback';
+  }
+}
+
 /* ===================== storage ===================== */
 const STORE_KEY = 'wl.videos.v1';
 const KEY_APIKEY = 'wl.youtube.apikey';
@@ -236,6 +370,7 @@ function render() {
     if (v.time > 2) { const bar = document.createElement('div'); bar.className = 'pct';
       const sp = document.createElement('span'); sp.style.width = pct + '%'; bar.appendChild(sp); tw.appendChild(bar); }
     if (v.duration) { const b = document.createElement('div'); b.className = 'badge'; b.textContent = fmt(v.duration); tw.appendChild(b); }
+    if (offlineSet.has(v.id)) { const ob = document.createElement('div'); ob.className = 'off-badge'; ob.textContent = 'offline'; tw.appendChild(ob); }
     li.appendChild(tw);
 
     const meta = document.createElement('div'); meta.className = 'meta';
@@ -250,11 +385,32 @@ function render() {
     row2.appendChild(status);
     meta.appendChild(row2); li.appendChild(meta);
 
+    const dlbtn = document.createElement('button');
+    dlbtn.dataset.dlid = v.id;
+    if (v.id in dlProgress) {
+      dlbtn.textContent = dlProgress[v.id] > 0 ? dlProgress[v.id] + '%' : '…';
+      dlbtn.className = 'dlbtn dling'; dlbtn.title = 'Tap to cancel';
+    } else if (offlineSet.has(v.id)) {
+      dlbtn.textContent = '⊗'; dlbtn.className = 'dlbtn done'; dlbtn.title = 'Remove downloaded copy';
+    } else {
+      dlbtn.textContent = '⬇'; dlbtn.className = 'dlbtn'; dlbtn.title = 'Download for offline playback';
+    }
+    dlbtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (v.id in dlProgress) cancelDownload(v.id);
+      else if (offlineSet.has(v.id)) deleteOffline(v.id);
+      else downloadVideo(v.id);
+    });
+    li.appendChild(dlbtn);
+
     const del = document.createElement('button'); del.className = 'del'; del.innerHTML = '&times;'; del.title = 'Remove';
-    del.addEventListener('click', (e) => { e.stopPropagation(); removeVideo(v.id); render(); });
+    del.addEventListener('click', (e) => { e.stopPropagation(); removeVideo(v.id); if (offlineSet.has(v.id)) deleteOffline(v.id); render(); });
     li.appendChild(del);
 
-    li.addEventListener('click', () => openPlayer(v.id));
+    li.addEventListener('click', () => {
+      if (offlineSet.has(v.id)) openPlayerOffline(v.id);
+      else openPlayer(v.id);
+    });
     listEl.appendChild(li);
   }
 }
@@ -460,6 +616,53 @@ document.getElementById('gear-btn').addEventListener('click', () => {
   else { localStorage.removeItem(KEY_APIKEY); toast('API key cleared'); }
 });
 
+/* ===================== local video player ===================== */
+let localVideoId = null, localBlobUrl = null, localSaveTimer = null;
+
+async function openPlayerOffline(id) {
+  const v = loadAll()[id] || { id };
+  document.getElementById('ptitle').textContent = v.title || 'YouTube video';
+  document.getElementById('player-view').classList.add('open');
+  localVideoId = id; currentId = null;
+
+  const blob = await idbGet(id);
+  if (!blob) { offlineSet.delete(id); render(); openPlayer(id); return; }
+
+  if (localBlobUrl) URL.revokeObjectURL(localBlobUrl);
+  localBlobUrl = URL.createObjectURL(blob);
+
+  document.getElementById('ytplayer').style.display = 'none';
+  const vid = document.getElementById('localvideo');
+  vid.style.display = '';
+  vid.src = localBlobUrl;
+  const startAt = v.done ? 0 : Math.max(0, (v.time || 0) - 2);
+  vid.currentTime = startAt;
+  vid.play().catch(() => {});
+
+  clearInterval(localSaveTimer);
+  localSaveTimer = setInterval(() => saveLocalProgress(false), 4000);
+}
+
+function saveLocalProgress(flash) {
+  if (!localVideoId) return;
+  const vid = document.getElementById('localvideo');
+  const t = vid.currentTime, d = vid.duration || 0;
+  const nearEnd = d && t >= d - 3;
+  upsert({ id: localVideoId, time: nearEnd ? 0 : t, duration: d || undefined, done: !!nearEnd });
+  if (flash) flashSaved('position saved');
+}
+
+(function wireLocalVideo() {
+  const vid = document.getElementById('localvideo');
+  vid.addEventListener('pause', () => saveLocalProgress(true));
+  vid.addEventListener('ended', () => { saveLocalProgress(false); flashSaved('finished ✓'); render(); });
+  vid.addEventListener('timeupdate', () => {
+    if (!localVideoId) return;
+    const d = vid.duration;
+    if (d && !loadAll()[localVideoId]?.duration) upsert({ id: localVideoId, duration: d });
+  });
+})();
+
 /* ===================== player ===================== */
 let player = null, currentId = null, saveTimer = null, apiReady = false, pendingId = null;
 window.onYouTubeIframeAPIReady = function () {
@@ -513,12 +716,18 @@ function flashSaved(text) {
 function closePlayer() {
   saveProgress(false); clearInterval(saveTimer);
   try { if (player && player.pauseVideo) player.pauseVideo(); } catch (e) {}
+  clearInterval(localSaveTimer); saveLocalProgress(false);
+  const vid = document.getElementById('localvideo');
+  vid.pause(); vid.src = ''; vid.style.display = 'none';
+  document.getElementById('ytplayer').style.display = '';
+  if (localBlobUrl) { URL.revokeObjectURL(localBlobUrl); localBlobUrl = null; }
+  localVideoId = null;
   document.getElementById('player-view').classList.remove('open'); currentId = null; render();
 }
 document.getElementById('back-btn').addEventListener('click', closePlayer);
-document.addEventListener('visibilitychange', () => { if (document.hidden) saveProgress(false); });
-window.addEventListener('pagehide', () => saveProgress(false));
-window.addEventListener('blur', () => saveProgress(false));
+document.addEventListener('visibilitychange', () => { if (document.hidden) { saveProgress(false); saveLocalProgress(false); } });
+window.addEventListener('pagehide', () => { saveProgress(false); saveLocalProgress(false); });
+window.addEventListener('blur', () => { saveProgress(false); saveLocalProgress(false); });
 
 /* ===================== incoming share URL ===================== */
 function handleIncomingURL() {
@@ -531,7 +740,8 @@ function handleIncomingURL() {
 
 /* ===================== boot ===================== */
 function loadYouTubeAPI() { const s = document.createElement('script'); s.src = 'https://www.youtube.com/iframe_api'; document.head.appendChild(s); }
-render(); loadYouTubeAPI(); handleIncomingURL();
+loadOfflineSet().then(() => render());
+loadYouTubeAPI(); handleIncomingURL();
 </script>
 </body>
 </html>
