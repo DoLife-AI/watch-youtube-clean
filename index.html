@@ -212,26 +212,63 @@ function idbKeys() {
 
 let offlineSet = new Set();
 async function loadOfflineSet() {
-  try { offlineSet = new Set(await idbKeys()); } catch (e) { offlineSet = new Set(); }
+  try {
+    const keys = await idbKeys();
+    offlineSet = new Set();
+    for (const k of keys) offlineSet.add(typeof k === 'string' && k.includes(':') ? k.split(':')[0] : k);
+  } catch (e) { offlineSet = new Set(); }
 }
 
 const dlProgress = {}, dlControllers = {};
 
-async function getStreamUrl(id) {
+async function getStreamInfo(id) {
   for (const base of INVIDIOUS_APIS) {
     try {
-      const res = await fetchWithTimeout(`${base}/api/v1/videos/${id}?local=true`, 12000);
-      if (!res.ok) continue;
+      const res = await fetchWithTimeout(`${base}/api/v1/videos/${id}?local=true`, 15000);
+      if (!res.ok) { console.warn('[dl]', base, res.status); continue; }
       const data = await res.json();
-      const streams = data.formatStreams || [];
-      const pick = streams.find(s => s.qualityLabel === '720p') ||
-                   streams.find(s => s.qualityLabel === '480p') ||
-                   streams.find(s => s.qualityLabel === '360p') ||
-                   streams[0];
-      if (pick && pick.url) return { url: pick.url, mime: (pick.mimeType || 'video/mp4').split(';')[0] };
-    } catch (e) { /* try next instance */ }
+
+      // Combined progressive stream (legacy itag 18/22) — simplest to play
+      const fmts = data.formatStreams || [];
+      const c = fmts.find(s => s.qualityLabel === '720p') ||
+                fmts.find(s => s.qualityLabel === '480p') ||
+                fmts.find(s => s.qualityLabel === '360p') ||
+                fmts[0];
+      if (c?.url) return { type: 'combined', url: c.url, mime: (c.mimeType || 'video/mp4').split(';')[0] };
+
+      // Adaptive streams — separate video + audio (most modern videos)
+      const adaptive = data.adaptiveFormats || [];
+      // Prefer MP4 (H.264 + AAC) for widest device support, especially iOS
+      const vMp4 = adaptive.filter(s => s.type?.startsWith('video/mp4') && s.qualityLabel);
+      const aMp4 = adaptive.filter(s => s.type?.startsWith('audio/mp4'));
+      if (vMp4.length && aMp4.length) {
+        const v = vMp4.find(s => s.qualityLabel === '720p') || vMp4.find(s => s.qualityLabel === '480p') ||
+                  vMp4.find(s => s.qualityLabel === '360p') || vMp4[0];
+        const a = aMp4.sort((x, y) => (y.bitrate || 0) - (x.bitrate || 0))[0];
+        if (v?.url && a?.url) return { type: 'adaptive', videoUrl: v.url, videoMime: v.type, audioUrl: a.url, audioMime: a.type };
+      }
+      // WebM fallback (VP9 + Opus)
+      const vWebm = adaptive.filter(s => s.type?.startsWith('video/webm') && s.qualityLabel);
+      const aWebm = adaptive.filter(s => s.type?.startsWith('audio/webm'));
+      if (vWebm.length && aWebm.length) {
+        const v = vWebm.find(s => s.qualityLabel === '720p') || vWebm.find(s => s.qualityLabel === '480p') || vWebm[0];
+        if (v?.url && aWebm[0]?.url) return { type: 'adaptive', videoUrl: v.url, videoMime: v.type, audioUrl: aWebm[0].url, audioMime: aWebm[0].type };
+      }
+      console.warn('[dl]', base, 'no usable streams');
+    } catch (e) { console.warn('[dl]', base, e.message); }
   }
   return null;
+}
+
+async function readChunks(reader, onProgress) {
+  const chunks = []; let got = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value); got += value.byteLength;
+    onProgress(got);
+  }
+  return chunks;
 }
 
 async function downloadVideo(id) {
@@ -240,41 +277,72 @@ async function downloadVideo(id) {
   dlControllers[id] = new AbortController();
   updateDlBtn(id);
   try {
-    const stream = await getStreamUrl(id);
-    if (!stream) throw new Error('no stream');
-    const res = await fetch(stream.url, { signal: dlControllers[id].signal });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const total = +res.headers.get('content-length') || 0;
-    const reader = res.body.getReader();
-    const chunks = []; let got = 0;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value); got += value.byteLength;
-      if (total) {
-        const pct = Math.round(got / total * 100);
-        if (pct !== dlProgress[id]) { dlProgress[id] = pct; updateDlBtn(id); }
-      }
+    const info = await getStreamInfo(id);
+    if (!info) throw new Error('nostream');
+
+    if (info.type === 'combined') {
+      const res = await fetch(info.url, { signal: dlControllers[id].signal });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const total = +res.headers.get('content-length') || 0;
+      const chunks = await readChunks(res.body.getReader(), got => {
+        if (total) { const p = Math.round(got / total * 100); if (p !== dlProgress[id]) { dlProgress[id] = p; updateDlBtn(id); } }
+      });
+      await idbPut(id, new Blob(chunks, { type: info.mime }));
+      upsert({ id, offlineType: 'combined' });
+    } else {
+      // Adaptive: fetch both streams, track combined progress
+      const [vRes, aRes] = await Promise.all([
+        fetch(info.videoUrl, { signal: dlControllers[id].signal }),
+        fetch(info.audioUrl, { signal: dlControllers[id].signal })
+      ]);
+      if (!vRes.ok) throw new Error('video HTTP ' + vRes.status);
+      if (!aRes.ok) throw new Error('audio HTTP ' + aRes.status);
+      const vTotal = +vRes.headers.get('content-length') || 0;
+      const aTotal = +aRes.headers.get('content-length') || 0;
+      const total = vTotal + aTotal;
+      let combined = 0;
+      const track = got => { combined = got;
+        if (total) { const p = Math.round(combined / total * 100); if (p !== dlProgress[id]) { dlProgress[id] = p; updateDlBtn(id); } }
+      };
+      // Download video first, then audio (sequential to limit memory)
+      const vChunks = await readChunks(vRes.body.getReader(), got => track(got));
+      const aChunks = await readChunks(aRes.body.getReader(), got => track(vTotal + got));
+      await Promise.all([
+        idbPut(id + ':v', new Blob(vChunks, { type: info.videoMime })),
+        idbPut(id + ':a', new Blob(aChunks, { type: info.audioMime }))
+      ]);
+      upsert({ id, offlineType: 'adaptive' });
     }
-    await idbPut(id, new Blob(chunks, { type: stream.mime }));
+
     offlineSet.add(id);
     delete dlProgress[id]; delete dlControllers[id];
     render(); toast('Saved for offline ✓');
   } catch (e) {
     delete dlProgress[id]; delete dlControllers[id];
-    if (e.name !== 'AbortError') toast('Download failed — try a different video or instance');
-    updateDlBtn(id);
+    if (e.name === 'AbortError') { updateDlBtn(id); return; }
+    const msg = e.message === 'nostream'
+      ? 'Could not reach download servers — check your connection and try again'
+      : 'Download failed — try again or try a different video';
+    console.error('[dl] error:', e);
+    toast(msg); updateDlBtn(id);
   }
 }
 
 function cancelDownload(id) {
-  if (dlControllers[id]) { dlControllers[id].abort(); }
+  if (dlControllers[id]) dlControllers[id].abort();
   delete dlProgress[id]; delete dlControllers[id];
   updateDlBtn(id);
 }
 
 async function deleteOffline(id) {
-  await idbDel(id); offlineSet.delete(id);
+  const v = loadAll()[id];
+  if (v?.offlineType === 'adaptive') {
+    await Promise.all([idbDel(id + ':v'), idbDel(id + ':a')]);
+  } else {
+    await idbDel(id);
+  }
+  offlineSet.delete(id);
+  upsert({ id, offlineType: null });
   render(); toast('Local copy removed');
 }
 
@@ -431,9 +499,15 @@ const PIPED_APIS = [
 ];
 const INVIDIOUS_APIS = [
   'https://yewtu.be',
-  'https://invidious.nerdvpn.de',
+  'https://inv.nadeko.net',
+  'https://invidious.privacydev.net',
+  'https://iv.melmac.space',
   'https://invidious.fdn.fr',
-  'https://inv.nadeko.net'
+  'https://yt.cdaut.de',
+  'https://invidious.nerdvpn.de',
+  'https://inv.tux.pizza',
+  'https://invidious.lunar.icu',
+  'https://invidious.perennialte.ch'
 ];
 
 function fetchWithTimeout(url, ms) {
@@ -617,28 +691,71 @@ document.getElementById('gear-btn').addEventListener('click', () => {
 });
 
 /* ===================== local video player ===================== */
-let localVideoId = null, localBlobUrl = null, localSaveTimer = null;
+let localVideoId = null, localBlobUrl = null, localMsUrl = null, localSaveTimer = null;
+
+function revokeLocalUrls() {
+  if (localBlobUrl) { URL.revokeObjectURL(localBlobUrl); localBlobUrl = null; }
+  if (localMsUrl) { URL.revokeObjectURL(localMsUrl); localMsUrl = null; }
+}
+
+async function playWithMSE(vid, vBlob, aBlob) {
+  if (!window.MediaSource) throw new Error('MSE not supported');
+  return new Promise((resolve, reject) => {
+    const ms = new MediaSource();
+    localMsUrl = URL.createObjectURL(ms);
+    vid.src = localMsUrl;
+    ms.addEventListener('sourceopen', async () => {
+      try {
+        const vSb = ms.addSourceBuffer(vBlob.type);
+        const aSb = ms.addSourceBuffer(aBlob.type);
+        const append = (sb, buf) => new Promise((r, rj) => {
+          const done = () => { sb.removeEventListener('updateend', done); sb.removeEventListener('error', fail); r(); };
+          const fail = e => { sb.removeEventListener('updateend', done); sb.removeEventListener('error', fail); rj(e); };
+          sb.addEventListener('updateend', done); sb.addEventListener('error', fail);
+          sb.appendBuffer(buf);
+        });
+        const [vBuf, aBuf] = await Promise.all([vBlob.arrayBuffer(), aBlob.arrayBuffer()]);
+        await append(vSb, vBuf);
+        await append(aSb, aBuf);
+        ms.endOfStream();
+        resolve();
+      } catch (e) { try { ms.endOfStream('decode'); } catch (_) {} reject(e); }
+    }, { once: true });
+  });
+}
 
 async function openPlayerOffline(id) {
   const v = loadAll()[id] || { id };
   document.getElementById('ptitle').textContent = v.title || 'YouTube video';
   document.getElementById('player-view').classList.add('open');
   localVideoId = id; currentId = null;
-
-  const blob = await idbGet(id);
-  if (!blob) { offlineSet.delete(id); render(); openPlayer(id); return; }
-
-  if (localBlobUrl) URL.revokeObjectURL(localBlobUrl);
-  localBlobUrl = URL.createObjectURL(blob);
-
   document.getElementById('ytplayer').style.display = 'none';
   const vid = document.getElementById('localvideo');
   vid.style.display = '';
-  vid.src = localBlobUrl;
+  revokeLocalUrls();
+
+  try {
+    if (v.offlineType === 'adaptive') {
+      const [vBlob, aBlob] = await Promise.all([idbGet(id + ':v'), idbGet(id + ':a')]);
+      if (!vBlob || !aBlob) throw new Error('missing blobs');
+      await playWithMSE(vid, vBlob, aBlob);
+    } else {
+      const blob = await idbGet(id);
+      if (!blob) throw new Error('missing blob');
+      localBlobUrl = URL.createObjectURL(blob);
+      vid.src = localBlobUrl;
+    }
+  } catch (e) {
+    console.error('[offline player]', e);
+    // Blob missing or MSE failed — clear offline state and fall back to online
+    offlineSet.delete(id); upsert({ id, offlineType: null });
+    vid.style.display = 'none'; document.getElementById('ytplayer').style.display = '';
+    localVideoId = null; render(); openPlayer(id); return;
+  }
+
   const startAt = v.done ? 0 : Math.max(0, (v.time || 0) - 2);
   vid.currentTime = startAt;
   vid.play().catch(() => {});
-
   clearInterval(localSaveTimer);
   localSaveTimer = setInterval(() => saveLocalProgress(false), 4000);
 }
@@ -720,7 +837,7 @@ function closePlayer() {
   const vid = document.getElementById('localvideo');
   vid.pause(); vid.src = ''; vid.style.display = 'none';
   document.getElementById('ytplayer').style.display = '';
-  if (localBlobUrl) { URL.revokeObjectURL(localBlobUrl); localBlobUrl = null; }
+  revokeLocalUrls();
   localVideoId = null;
   document.getElementById('player-view').classList.remove('open'); currentId = null; render();
 }
