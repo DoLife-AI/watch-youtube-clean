@@ -320,11 +320,11 @@ async function downloadVideo(id) {
   } catch (e) {
     delete dlProgress[id]; delete dlControllers[id];
     if (e.name === 'AbortError') { updateDlBtn(id); return; }
-    const msg = e.message === 'nostream'
-      ? 'Could not reach download servers — check your connection and try again'
-      : 'Download failed — try again or try a different video';
-    console.error('[dl] error:', e);
-    toast(msg); updateDlBtn(id);
+    let msg;
+    if (e.message === 'nostream') msg = 'No stream found — all Invidious servers failed or timed out';
+    else if (e instanceof TypeError) msg = 'Network/CORS error — server blocked the download request';
+    else msg = 'Download failed: ' + (e.message || 'unknown error');
+    toast(msg, 5000); updateDlBtn(id);
   }
 }
 
@@ -408,9 +408,9 @@ function fmt(sec) {
   const pad = (n) => String(n).padStart(2, '0');
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
-function toast(msg) {
+function toast(msg, ms) {
   const el = document.getElementById('toast'); el.textContent = msg; el.classList.add('show');
-  clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('show'), 2400);
+  clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('show'), ms || 2400);
 }
 function thumbUrl(id) { return `https://i.ytimg.com/vi/${id}/mqdefault.jpg`; }
 
