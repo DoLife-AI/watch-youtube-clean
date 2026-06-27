@@ -111,6 +111,7 @@
     color: var(--muted); border-radius: 10px; padding: 6px 9px; font-size: 13px; min-width: 36px;
     text-align: center; line-height: 1; margin-right: 2px; }
   .card .dlbtn.dling { color: var(--accent-2); border-color: var(--accent-2); font-size: 11px; }
+  .card .dlbtn.import { color: var(--accent-2); border-color: var(--accent-2); }
   .card .dlbtn.done { color: var(--ok); border-color: var(--ok); }
   .card .dlbtn:active { opacity: .7; }
   /* Offline indicator badge on thumbnail */
@@ -219,9 +220,33 @@ async function loadOfflineSet() {
   } catch (e) { offlineSet = new Set(); }
 }
 
-const dlProgress = {}, dlControllers = {};
+const dlProgress = {}, dlControllers = {}, dlImportMode = {};
+
+async function getStreamInfoCobalt(id) {
+  try {
+    const res = await fetchWithTimeout('https://api.cobalt.tools/', 15000, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: `https://www.youtube.com/watch?v=${id}`, vQuality: '720' })
+    });
+    if (!res.ok) { console.warn('[dl cobalt] HTTP', res.status); return null; }
+    const data = await res.json();
+    if ((data.status === 'tunnel' || data.status === 'stream') && data.url)
+      return { type: 'combined', url: data.url, mime: 'video/mp4' };
+    if (data.status === 'picker' && data.picker?.length) {
+      const v = data.picker.find(p => p.type === 'video') || data.picker[0];
+      if (v?.url) return { type: 'combined', url: v.url, mime: 'video/mp4' };
+    }
+    console.warn('[dl cobalt] status:', data.status, data.error || '');
+  } catch (e) { console.warn('[dl cobalt]', e.message); }
+  return null;
+}
 
 async function getStreamInfo(id) {
+  // --- Cobalt.tools — dedicated download API with CORS, most reliable ---
+  const cobalt = await getStreamInfoCobalt(id);
+  if (cobalt) return cobalt;
+
   // --- Try Invidious (combined progressive or adaptive, proxied through instance) ---
   for (const base of INVIDIOUS_APIS) {
     try {
@@ -349,12 +374,35 @@ async function downloadVideo(id) {
   } catch (e) {
     delete dlProgress[id]; delete dlControllers[id];
     if (e.name === 'AbortError') { updateDlBtn(id); return; }
-    let msg;
-    if (e.message === 'nostream') msg = 'No stream found — all Invidious servers failed or timed out';
-    else if (e instanceof TypeError) msg = 'Network/CORS error — server blocked the download request';
-    else msg = 'Download failed: ' + (e.message || 'unknown error');
-    toast(msg, 5000); updateDlBtn(id);
+    // Auto-download failed — switch button to import mode
+    dlImportMode[id] = true;
+    toast('Auto-download unavailable. Tap the 📂 button to import a video file you\'ve downloaded separately.', 7000);
+    updateDlBtn(id);
   }
+}
+
+function importVideoFile(id) {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'video/*,.mp4,.mov,.m4v,.webm';
+  input.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+  document.body.appendChild(input);
+  input.addEventListener('change', async () => {
+    const file = input.files[0];
+    document.body.removeChild(input);
+    if (!file) return;
+    dlImportMode[id] = false; dlProgress[id] = 0; updateDlBtn(id);
+    try {
+      await idbPut(id, file); // File extends Blob — store directly
+      offlineSet.add(id);
+      upsert({ id, offlineType: 'combined' });
+      delete dlProgress[id];
+      render(); toast('Imported for offline ✓');
+    } catch (e) {
+      delete dlProgress[id]; dlImportMode[id] = true;
+      toast('Import failed: ' + (e.message || 'unknown')); updateDlBtn(id);
+    }
+  });
+  input.click();
 }
 
 function cancelDownload(id) {
@@ -383,6 +431,8 @@ function updateDlBtn(id) {
     btn.className = 'dlbtn dling'; btn.title = 'Tap to cancel';
   } else if (offlineSet.has(id)) {
     btn.textContent = '⊗'; btn.className = 'dlbtn done'; btn.title = 'Remove downloaded copy';
+  } else if (dlImportMode[id]) {
+    btn.textContent = '📂'; btn.className = 'dlbtn import'; btn.title = 'Import a video file from your device';
   } else {
     btn.textContent = '⬇'; btn.className = 'dlbtn'; btn.title = 'Download for offline playback';
   }
@@ -489,6 +539,8 @@ function render() {
       dlbtn.className = 'dlbtn dling'; dlbtn.title = 'Tap to cancel';
     } else if (offlineSet.has(v.id)) {
       dlbtn.textContent = '⊗'; dlbtn.className = 'dlbtn done'; dlbtn.title = 'Remove downloaded copy';
+    } else if (dlImportMode[v.id]) {
+      dlbtn.textContent = '📂'; dlbtn.className = 'dlbtn import'; dlbtn.title = 'Import a video file from your device';
     } else {
       dlbtn.textContent = '⬇'; dlbtn.className = 'dlbtn'; dlbtn.title = 'Download for offline playback';
     }
@@ -496,6 +548,7 @@ function render() {
       e.stopPropagation();
       if (v.id in dlProgress) cancelDownload(v.id);
       else if (offlineSet.has(v.id)) deleteOffline(v.id);
+      else if (dlImportMode[v.id]) importVideoFile(v.id);
       else downloadVideo(v.id);
     });
     li.appendChild(dlbtn);
@@ -539,9 +592,9 @@ const INVIDIOUS_APIS = [
   'https://invidious.perennialte.ch'
 ];
 
-function fetchWithTimeout(url, ms) {
+function fetchWithTimeout(url, ms, opts) {
   const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), ms);
-  return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(t));
+  return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(t));
 }
 
 async function searchYouTube(query) {
